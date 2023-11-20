@@ -8,7 +8,5 @@ import java.io.File;
 @Configuration
 public class NNConfiguration {
 
-    public File neuralNetworkFile(){
-        return new File();
-    }
+
 }

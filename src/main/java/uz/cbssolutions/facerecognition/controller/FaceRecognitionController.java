@@ -1,0 +1,27 @@
+package uz.cbssolutions.facerecognition.controller;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.multipart.FilePart;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import uz.cbssolutions.facerecognition.dto.FaceRecognitionResult;
+import uz.cbssolutions.facerecognition.service.ImageProcessing;
+
+@RestController()
+@RequestMapping(value = "/facerecognize")
+@RequiredArgsConstructor
+public class FaceRecognitionController {
+
+    private final ImageProcessing imageProcessing;
+
+    @PostMapping
+    public Mono<FaceRecognitionResult> upload(@RequestPart Flux<FilePart> fileParts) {
+        return imageProcessing.recogniseFaces(fileParts);
+    }
+}

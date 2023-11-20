@@ -1,7 +1,18 @@
 package uz.cbssolutions.facerecognition.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.datavec.image.loader.NativeImageLoader;
+import org.deeplearning4j.nn.graph.ComputationGraph;
+import org.deeplearning4j.nn.transferlearning.TransferLearningHelper;
+import org.deeplearning4j.zoo.PretrainedType;
+import org.deeplearning4j.zoo.ZooModel;
+import org.deeplearning4j.zoo.model.VGG16;
+import org.nd4j.linalg.api.ndarray.INDArray;
+import org.nd4j.linalg.dataset.DataSet;
+import org.nd4j.linalg.dataset.api.preprocessor.DataNormalization;
+import org.nd4j.linalg.dataset.api.preprocessor.VGG16ImagePreProcessor;
+import org.nd4j.linalg.factory.Nd4j;
 import org.opencv.core.*;
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.objdetect.CascadeClassifier;
@@ -11,9 +22,12 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import uz.cbssolutions.facerecognition.dto.FaceRecognitionResult;
+import uz.cbssolutions.facerecognition.exception.ErrorParsingMat;
 import uz.cbssolutions.facerecognition.exception.MultipleFacesException;
 import uz.cbssolutions.facerecognition.exception.NoFacesPresentedException;
+import uz.cbssolutions.facerecognition.math.EuclideanDistance;
 import uz.cbssolutions.facerecognition.model.FaceData;
+import uz.cbssolutions.facerecognition.model.NLPFaceData;
 import uz.cbssolutions.facerecognition.service.ImageProcessing;
 
 import javax.imageio.ImageIO;
@@ -22,14 +36,30 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
+@Slf4j
 public class ImageProcessingImpl implements ImageProcessing {
 
     public final CascadeClassifier faceDetector = new CascadeClassifier("haarcascade_frontalface_alt.xml");
+    private DataNormalization scalerNormalizer = new VGG16ImagePreProcessor();;
+    private EuclideanDistance euclideanDistance = new EuclideanDistance();
     public final NativeImageLoader nativeImageLoader = new NativeImageLoader(224, 224, 3);
+    private TransferLearningHelper transferLearningHelper;
+
+    public ImageProcessingImpl() {
+        try {
+            ZooModel objZooModel = VGG16.builder().build();
+            ComputationGraph objComputationGraph = null;
+            objComputationGraph = (ComputationGraph) objZooModel.initPretrained(PretrainedType.VGGFACE);
+            transferLearningHelper = new TransferLearningHelper(objComputationGraph,"pool4");
+        }
+        catch (IOException exception){
+            log.error("Error Creating dataset: {}", exception.getLocalizedMessage());
+        }
+    }
 
     @Override
     public Mono<FaceRecognitionResult> recogniseFaces(Flux<FilePart> images) {
@@ -41,65 +71,49 @@ public class ImageProcessingImpl implements ImageProcessing {
                             return bytes;
                         }))
                         .map(bytes -> {
-                            Mat image = Imgcodecs.imdecode(new MatOfByte(bytes), Imgcodecs.IMREAD_UNCHANGED);
+                            Mat image = Imgcodecs.imdecode(new MatOfByte(bytes), Imgcodecs.IMREAD_GRAYSCALE);
                             MatOfRect faceDetections = new MatOfRect();
-                            List<Mat> faces = new ArrayList<>();
+                            LinkedList<Mat> faces = new LinkedList<>();
                             faceDetector.detectMultiScale(image, faceDetections);
                             for (Rect rect : faceDetections.toArray()) {
                                 faces.add(new Mat(image, rect));
                             }
                             return FaceData.builder().mat(faces).matOfRect(faceDetections).build();
                         })
+                .log()
                 .flatMap(faceData -> {
-                    if(faceData.getMat().isEmpty()) return Mono.error(new NoFacesPresentedException("No Faces Presented"));
-                    else if (faceData.getMat().size()>1) return Mono.error(new MultipleFacesException("Multiple Faces Presented"));
+                    if(faceData.mat().isEmpty()) return Mono.error(new NoFacesPresentedException("No Faces Presented"));
+                    else if (faceData.mat().size()>1) return Mono.error(new MultipleFacesException("Multiple Faces Presented"));
                     else return Mono.just(faceData);
                 })
-                .map(nativeImageLoader.asMatrix());
-
-
-
-                filePartMono.map(filePart ->)
-        Mat image1 = Imgcodecs. ("image1.jpg");
-        Mat image2 = Imgcodecs.imread("image2.jpg");
-        MatOfRect faceDetections1 = new MatOfRect();
-        MatOfRect faceDetections2 = new MatOfRect();
-        faceDetector.detectMultiScale(image1, faceDetections1);
-        faceDetector.detectMultiScale(image2, faceDetections2);
-        System.out.println(String.format("Detected %s faces in image1", faceDetections1.toArray().length));
-        System.out.println(String.format("Detected %s faces in image2", faceDetections2.toArray().length));
-        List<Mat> faces1 = new ArrayList<Mat>();
-        List<Mat> faces2 = new ArrayList<Mat>();
-        for (Rect rect : faceDetections1.toArray()) {
-            faces1.add(new Mat(image1, rect));
-            Imgproc.rectangle(image1, new Point(rect.x, rect.y), new Point(rect.x + rect.width, rect.y + rect.height),
-                    new Scalar(0, 255, 0));
-        }
-        for (Rect rect : faceDetections2.toArray()) {
-            faces2.add(new Mat(image2, rect));
-            Imgproc.rectangle(image2, new Point(rect.x, rect.y), new Point(rect.x + rect.width, rect.y + rect.height),
-                    new Scalar(0, 255, 0));
-        }
-        Imgcodecs.imwrite("output1.jpg", image1);
-        Imgcodecs.imwrite("output2.jpg", image2);
-        double threshold = 0.6;
-        return null;
-    }
-
-
-    public Mono<Mat> image2Mat(Flux<InputStream> imageStream) throws IOException {
-        return imageStream.map(stream -> {
+                .handle((faceData, sink) -> {
                     try {
-                        BufferedImage image = ImageIO.read(stream);
-                        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-                        ImageIO.write(image, "jpg", byteArrayOutputStream);
-                        byteArrayOutputStream.flush();
-                        return Imgcodecs.imdecode(new MatOfByte(byteArrayOutputStream.toByteArray()), Imgcodecs.IMREAD_UNCHANGED);
+                        INDArray face = nativeImageLoader.asMatrix(faceData.mat().getFirst());
+                        scalerNormalizer.transform(face);
+                        DataSet objDataSet = new DataSet(face, Nd4j.create(new float[]{0,0}));
+                        DataSet objFeaturized = transferLearningHelper.featurize(objDataSet);
+                        INDArray featuresArray = objFeaturized.getFeatures();
+                        long reshapeDimension=1;
+                        for (long dimension : featuresArray.shape()) {
+                            reshapeDimension *= dimension;
+                        }
+                        featuresArray = featuresArray.reshape(1,reshapeDimension);
+
+                        sink.next(NLPFaceData.builder().face(featuresArray).build());
+                    } catch (IOException e) {
+                        sink.error(new ErrorParsingMat(e.getLocalizedMessage()));
                     }
-
                 })
-                .onErrorMap(throwable ->);
-
-
+                .cast(NLPFaceData.class)
+                .take(2)
+                .collectList()
+                .map(dataList -> {
+                    double distance = euclideanDistance.run(dataList.get(0).face(),dataList.get(1).face());
+                    return FaceRecognitionResult.builder()
+                            .recognitionValue(distance)
+                            .message(distance<Double.MAX_VALUE? "Match" : "Not Matched")
+                            .build();
+                });
     }
+
 }
