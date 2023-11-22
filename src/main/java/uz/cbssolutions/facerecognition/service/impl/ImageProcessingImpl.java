@@ -3,11 +3,13 @@ package uz.cbssolutions.facerecognition.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.datavec.image.loader.NativeImageLoader;
+import org.deeplearning4j.nn.api.Model;
 import org.deeplearning4j.nn.graph.ComputationGraph;
 import org.deeplearning4j.nn.transferlearning.TransferLearningHelper;
 import org.deeplearning4j.zoo.PretrainedType;
 import org.deeplearning4j.zoo.ZooModel;
 import org.deeplearning4j.zoo.model.VGG16;
+import org.nd4j.enums.Mode;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.dataset.DataSet;
 import org.nd4j.linalg.dataset.api.preprocessor.DataNormalization;
@@ -15,6 +17,7 @@ import org.nd4j.linalg.dataset.api.preprocessor.VGG16ImagePreProcessor;
 import org.nd4j.linalg.factory.Nd4j;
 import org.opencv.core.*;
 import org.opencv.imgcodecs.Imgcodecs;
+import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.CascadeClassifier;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.codec.multipart.FilePart;
@@ -29,15 +32,8 @@ import uz.cbssolutions.facerecognition.math.EuclideanDistance;
 import uz.cbssolutions.facerecognition.model.FaceData;
 import uz.cbssolutions.facerecognition.model.NLPFaceData;
 import uz.cbssolutions.facerecognition.service.ImageProcessing;
-
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.LinkedList;
-import java.util.List;
 
 @Service
 @Slf4j
@@ -48,12 +44,13 @@ public class ImageProcessingImpl implements ImageProcessing {
     private EuclideanDistance euclideanDistance = new EuclideanDistance();
     public final NativeImageLoader nativeImageLoader = new NativeImageLoader(224, 224, 3);
     private TransferLearningHelper transferLearningHelper;
+    ComputationGraph objComputationGraph;
 
     public ImageProcessingImpl() {
         try {
-            ZooModel objZooModel = VGG16.builder().build();
-            ComputationGraph objComputationGraph = null;
-            objComputationGraph = (ComputationGraph) objZooModel.initPretrained(PretrainedType.VGGFACE);
+            VGG16 objZooModel = VGG16.builder().build();
+            Model vgg16 = objZooModel.initPretrained(PretrainedType.VGGFACE);
+            objComputationGraph = (ComputationGraph) vgg16;
             transferLearningHelper = new TransferLearningHelper(objComputationGraph,"pool4");
         }
         catch (IOException exception){
@@ -88,16 +85,20 @@ public class ImageProcessingImpl implements ImageProcessing {
                 })
                 .handle((faceData, sink) -> {
                     try {
+                        String file2 = "/home/ideasquarebased/img.jpg";
+                        Imgcodecs imageCodecs = new Imgcodecs();
+                        //Writing the image
+                        imageCodecs.imwrite(file2, faceData.mat().getFirst());
+
+
                         INDArray face = nativeImageLoader.asMatrix(faceData.mat().getFirst());
                         scalerNormalizer.transform(face);
+
+
                         DataSet objDataSet = new DataSet(face, Nd4j.create(new float[]{0,0}));
                         DataSet objFeaturized = transferLearningHelper.featurize(objDataSet);
                         INDArray featuresArray = objFeaturized.getFeatures();
-                        long reshapeDimension=1;
-                        for (long dimension : featuresArray.shape()) {
-                            reshapeDimension *= dimension;
-                        }
-                        featuresArray = featuresArray.reshape(1,reshapeDimension);
+
 
                         sink.next(NLPFaceData.builder().face(featuresArray).build());
                     } catch (IOException e) {
@@ -108,12 +109,14 @@ public class ImageProcessingImpl implements ImageProcessing {
                 .take(2)
                 .collectList()
                 .map(dataList -> {
-                    double distance = euclideanDistance.run(dataList.get(0).face(),dataList.get(1).face());
+                    EuclideanDistance euclideanDistance = new EuclideanDistance();
+                    double distance = dataList.get(0).face().distance2(dataList.get(1).face());
                     return FaceRecognitionResult.builder()
                             .recognitionValue(distance)
-                            .message(distance<Double.MAX_VALUE? "Match" : "Not Matched")
+                            .message(distance<76_000? "Match" : "Not Matched")
                             .build();
                 });
     }
+
 
 }

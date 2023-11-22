@@ -1,6 +1,7 @@
 package uz.cbssolutions.facerecognition.controller;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Controller;
@@ -15,10 +16,14 @@ import uz.cbssolutions.facerecognition.service.ImageProcessing;
 
 @RestController()
 @RequestMapping(value = "/facerecognize")
-@RequiredArgsConstructor
 public class FaceRecognitionController {
 
+
     private final ImageProcessing imageProcessing;
+
+    public FaceRecognitionController(@Qualifier("DJLImageProcessor") ImageProcessing imageProcessing) {
+        this.imageProcessing = imageProcessing;
+    }
 
     @PostMapping
     public Mono<FaceRecognitionResult> upload(@RequestPart Flux<FilePart> fileParts) {
