@@ -1,23 +1,22 @@
 package uz.cbssolutions.facerecognition.service.impl;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.datavec.image.loader.NativeImageLoader;
 import org.deeplearning4j.nn.api.Model;
 import org.deeplearning4j.nn.graph.ComputationGraph;
 import org.deeplearning4j.nn.transferlearning.TransferLearningHelper;
 import org.deeplearning4j.zoo.PretrainedType;
-import org.deeplearning4j.zoo.ZooModel;
 import org.deeplearning4j.zoo.model.VGG16;
-import org.nd4j.enums.Mode;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.dataset.DataSet;
 import org.nd4j.linalg.dataset.api.preprocessor.DataNormalization;
 import org.nd4j.linalg.dataset.api.preprocessor.VGG16ImagePreProcessor;
 import org.nd4j.linalg.factory.Nd4j;
-import org.opencv.core.*;
+import org.opencv.core.Mat;
+import org.opencv.core.MatOfByte;
+import org.opencv.core.MatOfRect;
+import org.opencv.core.Rect;
 import org.opencv.imgcodecs.Imgcodecs;
-import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.CascadeClassifier;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.codec.multipart.FilePart;
@@ -28,10 +27,10 @@ import uz.cbssolutions.facerecognition.dto.FaceRecognitionResult;
 import uz.cbssolutions.facerecognition.exception.ErrorParsingMat;
 import uz.cbssolutions.facerecognition.exception.MultipleFacesException;
 import uz.cbssolutions.facerecognition.exception.NoFacesPresentedException;
-import uz.cbssolutions.facerecognition.math.EuclideanDistance;
 import uz.cbssolutions.facerecognition.model.FaceData;
 import uz.cbssolutions.facerecognition.model.NLPFaceData;
 import uz.cbssolutions.facerecognition.service.ImageProcessing;
+
 import java.io.IOException;
 import java.util.LinkedList;
 
@@ -40,8 +39,7 @@ import java.util.LinkedList;
 public class ImageProcessingImpl implements ImageProcessing {
 
     public final CascadeClassifier faceDetector = new CascadeClassifier("haarcascade_frontalface_alt.xml");
-    private DataNormalization scalerNormalizer = new VGG16ImagePreProcessor();;
-    private EuclideanDistance euclideanDistance = new EuclideanDistance();
+    private final DataNormalization scalerNormalizer = new VGG16ImagePreProcessor();
     public final NativeImageLoader nativeImageLoader = new NativeImageLoader(224, 224, 3);
     private TransferLearningHelper transferLearningHelper;
     ComputationGraph objComputationGraph;
@@ -85,16 +83,11 @@ public class ImageProcessingImpl implements ImageProcessing {
                 })
                 .handle((faceData, sink) -> {
                     try {
-                        String file2 = "/home/ideasquarebased/img.jpg";
-                        Imgcodecs imageCodecs = new Imgcodecs();
+                        String file2 = "/home/img.jpg";
                         //Writing the image
-                        imageCodecs.imwrite(file2, faceData.mat().getFirst());
-
-
+                        Imgcodecs.imwrite(file2, faceData.mat().getFirst());
                         INDArray face = nativeImageLoader.asMatrix(faceData.mat().getFirst());
                         scalerNormalizer.transform(face);
-
-
                         DataSet objDataSet = new DataSet(face, Nd4j.create(new float[]{0,0}));
                         DataSet objFeaturized = transferLearningHelper.featurize(objDataSet);
                         INDArray featuresArray = objFeaturized.getFeatures();
@@ -109,7 +102,6 @@ public class ImageProcessingImpl implements ImageProcessing {
                 .take(2)
                 .collectList()
                 .map(dataList -> {
-                    EuclideanDistance euclideanDistance = new EuclideanDistance();
                     double distance = dataList.get(0).face().distance2(dataList.get(1).face());
                     return FaceRecognitionResult.builder()
                             .recognitionValue(distance)

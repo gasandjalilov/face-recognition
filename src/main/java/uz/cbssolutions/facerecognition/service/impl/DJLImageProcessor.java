@@ -21,7 +21,6 @@ import uz.cbssolutions.facerecognition.helper.FaceFeatureTranslator;
 import uz.cbssolutions.facerecognition.service.ImageProcessing;
 
 import java.io.IOException;
-import java.nio.file.Path;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -38,7 +37,6 @@ public class DJLImageProcessor implements ImageProcessing {
                     try {
                         return Mono.just(ImageFactory.getInstance().fromInputStream(dataBuffer.asInputStream()));
                     } catch (IOException e) {
-                        e.printStackTrace();
                         return Mono.error(new ErrorParsingImage("Could not parse image from InputStream"));
                     }
                 })
@@ -46,7 +44,6 @@ public class DJLImageProcessor implements ImageProcessing {
                     try {
                         return Mono.just(predict(image));
                     } catch (Exception e) {
-                        e.printStackTrace();
                         return Mono.error(new ErrorParsingImage("Could not predict image from Mono<Image>"));
                     }
                 })
