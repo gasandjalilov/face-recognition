@@ -50,10 +50,13 @@ public class DJLImageProcessor implements ImageProcessing {
                 )
                 .take(2)
                 .collectList()
-                .map(floats -> FaceRecognitionResult.builder()
-                        .recognitionValue(calculSimilar(floats.get(0),floats.get(1)))
-                        .message("Check")
-                        .build()
+                .map(floats -> {
+                    var distance = calculSimilar(floats.get(0),floats.get(1));
+                    return FaceRecognitionResult.builder()
+                                    .recognitionValue(distance)
+                                    .message(distance<79_000? "Match" : "Not Matched")
+                                    .build();
+                        }
                         );
     }
 

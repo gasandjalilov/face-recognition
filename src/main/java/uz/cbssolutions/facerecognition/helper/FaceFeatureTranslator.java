@@ -1,23 +1,13 @@
 package uz.cbssolutions.facerecognition.helper;
 
-import ai.djl.ModelException;
-import ai.djl.inference.Predictor;
 import ai.djl.modality.cv.Image;
 import ai.djl.modality.cv.transform.Normalize;
 import ai.djl.modality.cv.transform.ToTensor;
-import ai.djl.ndarray.NDList;
 import ai.djl.ndarray.NDArray;
-import ai.djl.repository.zoo.Criteria;
-import ai.djl.repository.zoo.ZooModel;
-import ai.djl.training.util.ProgressBar;
+import ai.djl.ndarray.NDList;
 import ai.djl.translate.Pipeline;
-import ai.djl.translate.TranslateException;
 import ai.djl.translate.Translator;
 import ai.djl.translate.TranslatorContext;
-import org.springframework.stereotype.Component;
-
-import java.io.IOException;
-import java.nio.file.Path;
 
 
 public class FaceFeatureTranslator implements Translator<Image, float[]> {
